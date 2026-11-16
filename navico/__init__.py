@@ -1,0 +1,1 @@
+"""Medición horizontal de imágenes."""
