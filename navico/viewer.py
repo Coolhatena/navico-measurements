@@ -1,6 +1,6 @@
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QPen, QPixmap, QPainter
-from PySide6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsItem
+from PySide6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsItem, QLabel
 from .model import pixel_at, make_roi
 
 
@@ -9,6 +9,7 @@ class ImageView(QGraphicsView):
     coordinates = Signal(str)
     zoom_changed = Signal(float)
     hint = Signal(str)
+    mode_changed = Signal(object)
 
     def __init__(self):
         super().__init__()
@@ -26,8 +27,14 @@ class ImageView(QGraphicsView):
         self.pixmap = None
         self.space = False
         self.drag_pos = None
+        self.empty_label = QLabel('Abre una carpeta y selecciona una imagen', self.viewport())
+        self.empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.empty_label.setStyleSheet('background: transparent; color: #b5bfce; font-size: 15px;')
+        self.empty_label.setWordWrap(True)
+        self.empty_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
     def load_image(self, image, record):
+        self.empty_label.hide()
         self.cancel()
         self.scene().clear()
         self.overlays = []
@@ -40,9 +47,16 @@ class ImageView(QGraphicsView):
     def clear_image(self):
         self.cancel()
         self.scene().clear()
+        self.scene().setSceneRect(0, 0, 1, 1)
+        self.resetTransform()
         self.overlays = []
         self.record = self.pixmap = None
         self.coordinates.emit('X: —   Y: —')
+        self.empty_label.show()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.empty_label.setGeometry(self.viewport().rect())
 
     def fit_image(self):
         if self.pixmap:
@@ -62,12 +76,14 @@ class ImageView(QGraphicsView):
     def set_mode(self, mode):
         self.cancel()
         self.mode = mode
+        self.mode_changed.emit(mode)
         self.setFocus()
         self.setCursor(Qt.CursorShape.CrossCursor)
-        self.hint.emit('Selecciona dos puntos. Escape cancela; espacio + arrastre desplaza.')
+        self.hint.emit('Selecciona dos puntos.\nEscape para cancelar.')
 
     def cancel(self):
         self.mode = self.first = self.hover = None
+        self.mode_changed.emit(None)
         self.space = False
         self.drag_pos = None
         self.unsetCursor()

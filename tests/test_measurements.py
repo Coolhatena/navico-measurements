@@ -242,7 +242,9 @@ class WindowTests(unittest.TestCase):
             self.window.open_folder(self.root)
         self.assertTrue(self.window.store.blocked)
         self.assertFalse(self.window.widths['line_width'].isEnabled())
-        self.assertFalse(self.window.image_controls[0].isEnabled())
+        self.assertFalse(self.window.rotate_left.isEnabled())
+        self.assertTrue(all(button.isEnabled() for button in self.window.navigation_controls))
+        self.assertFalse(any(button.isEnabled() for button in self.window.draw_buttons.values()))
         self.assertIsNone(self.window.viewer.mode)
         self.assertEqual(path.read_text(), '{roto')
 
@@ -253,6 +255,51 @@ class WindowTests(unittest.TestCase):
         warning.assert_called_once()
         self.assertIsNone(self.window.current)
         self.assertIsNone(self.window.viewer.pixmap)
+
+    def test_tool_buttons_follow_cancel_complete_and_image_change(self):
+        w = self.window
+        QTest.mouseClick(w.draw_buttons['line'], Qt.MouseButton.LeftButton)
+        self.assertTrue(w.draw_buttons['line'].isChecked())
+        self.assertFalse(w.draw_buttons['roi'].isChecked())
+        QTest.keyClick(w.viewer, Qt.Key.Key_Escape)
+        self.assertFalse(any(b.isChecked() for b in w.draw_buttons.values()))
+        QTest.mouseClick(w.draw_buttons['roi'], Qt.MouseButton.LeftButton)
+        self.app.processEvents()
+        for x, y in [(10, 10), (40, 50)]:
+            pos = w.viewer.mapFromScene(QPointF(x+.5, y+.5))
+            QTest.mouseClick(w.viewer.viewport(), Qt.MouseButton.LeftButton, pos=pos)
+        self.assertIsNotNone(w.current.roi)
+        self.assertFalse(w.draw_buttons['roi'].isChecked())
+        QTest.mouseClick(w.draw_buttons['line'], Qt.MouseButton.LeftButton)
+        w.select_image(0)
+        self.assertFalse(any(b.isChecked() for b in w.draw_buttons.values()))
+
+    def test_keyboard_list_navigation_and_metadata(self):
+        w = self.window
+        self.window.base_image.save(str(self.root / 'second.png'))
+        w.open_folder(self.root)
+        self.assertEqual(w.count_label.text(), '2 imágenes')
+        self.assertEqual(w.list.item(0).data(Qt.ItemDataRole.UserRole), 'second.png')
+        self.assertEqual(w.list.item(0).toolTip(), str((self.root / 'second.png').resolve()))
+        w.list.setFocus()
+        QTest.keyClick(w.list, Qt.Key.Key_Down)
+        self.assertEqual(w.list.currentRow(), 1)
+        self.assertEqual(w.file_label.full_text, 'test.png')
+        self.assertEqual(w.dimensions_label.text(), '100 × 80 px')
+        w.rotate(90)
+        self.assertEqual(w.dimensions_label.text(), '80 × 100 px')
+
+    def test_empty_folder_disables_all_image_controls(self):
+        empty = self.root / 'vacía'
+        empty.mkdir()
+        self.window.open_folder(empty)
+        self.assertEqual(self.window.count_label.text(), '0 imágenes')
+        self.assertFalse(any(b.isEnabled() for b in self.window.edit_controls + self.window.navigation_controls))
+        self.assertFalse(self.window.viewer.empty_label.isHidden())
+        self.assertEqual(self.window.distance_label.text(), '— px')
+        self.app.processEvents()
+        self.assertEqual(self.window.viewer.horizontalScrollBar().maximum(), 0)
+        self.assertEqual(self.window.viewer.verticalScrollBar().maximum(), 0)
 
 
 if __name__ == '__main__':

@@ -3,89 +3,34 @@ from pathlib import Path
 import sys
 from PySide6.QtCore import Qt, QSignalBlocker
 from PySide6.QtGui import QImageReader, QTransform
-from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QListWidget, QSplitter, QFileDialog, QMessageBox, QSpinBox)
+from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QMessageBox, QListWidgetItem
+from .ui import WorkspaceUI
 from .model import Measurement
 from .storage import Store, find_images
 from .viewer import ImageView
 
 
-class MainWindow(QMainWindow):
+class MainWindow(WorkspaceUI, QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle('Navico · Medición horizontal')
-        self.resize(1280, 850)
+        self.resize(1440, 900)
+        self.setMinimumSize(1100, 700)
         self.store = self.current = self.base_image = None
         self.paths = []
         self.viewer = ImageView()
-        self.list = QListWidget()
-        self.list.setMinimumWidth(230)
-        self.list.currentRowChanged.connect(self.select_image)
-        self.folder_label = QLabel('Abre una carpeta para comenzar')
-        self.folder_label.setWordWrap(True)
-        side = QWidget()
-        sl = QVBoxLayout(side)
-        sl.addWidget(self.folder_label)
-        sl.addWidget(self.list)
-        splitter = QSplitter()
-        splitter.addWidget(side)
-        splitter.addWidget(self.viewer)
-        splitter.setStretchFactor(1, 1)
-        splitter.setSizes([300, 980])
-        root = QWidget()
-        layout = QVBoxLayout(root)
-        toolbar = QHBoxLayout()
-        layout.addLayout(toolbar)
-        def button(label, callback, target=toolbar):
-            b = QPushButton(label)
-            b.clicked.connect(callback)
-            target.addWidget(b)
-            return b
-        button('Abrir carpeta…', self.choose_folder)
-        self.image_controls = []
-        for label, callback in [('↶ 90°', lambda: self.rotate(-90)), ('↷ 90°', lambda: self.rotate(90)),
-                                ('−', lambda: self.viewer.set_zoom(self.viewer.transform().m11() / 1.25)),
-                                ('+', lambda: self.viewer.set_zoom(self.viewer.transform().m11() * 1.25)),
-                                ('100 %', lambda: self.viewer.set_zoom(1)), ('Ajustar', self.viewer.fit_image)]:
-            self.image_controls.append(button(label, callback))
-        self.zoom_label = QLabel('100 %')
-        toolbar.addWidget(self.zoom_label)
-        toolbar.addStretch()
-        tools = QHBoxLayout()
-        layout.addLayout(tools)
-        for label, callback in [('Dibujar línea', lambda: self.viewer.set_mode('line')), ('Dibujar ROI', lambda: self.viewer.set_mode('roi')),
-                                ('Borrar línea', lambda: self.erase('line')), ('Borrar ROI', lambda: self.erase('roi'))]:
-            self.image_controls.append(button(label, callback, tools))
-        self.widths = {}
-        for key, label in [('line_width', 'Grosor línea:'), ('roi_width', 'Grosor ROI:')]:
-            tools.addWidget(QLabel(label))
-            spin = QSpinBox()
-            spin.setRange(1, 50)
-            spin.setValue(2)
-            spin.setSuffix(' px')
-            spin.valueChanged.connect(lambda value, k=key: self.set_width(k, value))
-            tools.addWidget(spin)
-            self.widths[key] = spin
-            self.image_controls.append(spin)
-        self.distance_label = QLabel('Distancia: —')
-        self.distance_label.setStyleSheet('color: #0066ff; font-weight: bold; font-size: 18px;')
-        layout.addWidget(self.distance_label)
-        layout.addWidget(splitter, 1)
-        self.hint_label = QLabel('Dos clics para dibujar · Escape cancela · Rueda: zoom · Espacio + arrastre: desplazar')
-        layout.addWidget(self.hint_label)
-        self.setCentralWidget(root)
-        self.cursor_label = QLabel('X: —   Y: —')
-        self.statusBar().addPermanentWidget(self.cursor_label)
-        self.save_label = QLabel('Sin carpeta')
-        self.statusBar().addWidget(self.save_label)
+        self.build_workspace()
         self.viewer.coordinates.connect(self.cursor_label.setText)
         self.viewer.hint.connect(self.hint_label.setText)
+        self.viewer.mode_changed.connect(self.sync_tool)
         self.viewer.zoom_changed.connect(lambda scale: self.zoom_label.setText(f'{scale*100:.1f} %'))
         self.viewer.changed.connect(self.changed)
         self.enable_controls(False)
 
     def enable_controls(self, enabled):
-        for widget in self.image_controls:
+        for widget in self.navigation_controls:
+            widget.setEnabled(self.current is not None)
+        for widget in self.edit_controls:
             widget.setEnabled(enabled)
 
     def choose_folder(self):
@@ -133,20 +78,34 @@ class MainWindow(QMainWindow):
         self.current = self.base_image = None
         self.viewer.clear_image()
         self.enable_controls(False)
-        self.distance_label.setText('Distancia: —')
+        self.distance_label.setText('— px')
+        self.file_label.setText('Selecciona una imagen')
+        self.dimensions_label.setText('—')
+        self.zoom_label.setText('—')
         with QSignalBlocker(self.list):
             self.list.clear()
-            self.list.addItems([p.relative_to(store.root).as_posix() for p in paths])
-        self.folder_label.setText(f'{store.root}\n{len(paths)} imágenes')
+            for path in paths:
+                relative = path.relative_to(store.root)
+                item = QListWidgetItem(relative.as_posix())
+                item.setData(Qt.ItemDataRole.UserRole, path.name)
+                item.setData(Qt.ItemDataRole.UserRole + 1, relative.parent.as_posix() if relative.parent != Path('.') else store.root.name)
+                item.setToolTip(str(path.resolve()))
+                self.list.addItem(item)
+        self.folder_label.setText(store.root.resolve().name)
+        self.folder_label.setToolTip(str(store.root.resolve()))
+        self.count_label.setText(f'{len(paths)} imagen' if len(paths) == 1 else f'{len(paths)} imágenes')
         self.save_label.setText('Solo lectura: configuración inválida' if store.blocked else 'Sin cambios pendientes')
         if paths:
             self.list.setCurrentRow(0)
 
     def select_image(self, row):
-        self.viewer.clear_image()
         self.current = self.base_image = None
+        self.viewer.clear_image()
         self.enable_controls(False)
-        self.distance_label.setText('Distancia: —')
+        self.distance_label.setText('— px')
+        self.file_label.setText('Selecciona una imagen')
+        self.dimensions_label.setText('—')
+        self.zoom_label.setText('—')
         if row < 0 or row >= len(self.paths):
             return
         path = self.paths[row]
@@ -171,10 +130,6 @@ class MainWindow(QMainWindow):
                 spin.setValue(getattr(record, key))
         self.show_oriented()
         self.enable_controls(not self.store.blocked)
-        # El zoom y ajuste siguen disponibles en modo de solo lectura.
-        if self.store.blocked:
-            for widget in self.image_controls[2:6]:
-                widget.setEnabled(True)
         self.update_distance()
         if resized and not self.store.blocked:
             self.changed()
@@ -182,6 +137,10 @@ class MainWindow(QMainWindow):
     def show_oriented(self):
         image = self.base_image.transformed(QTransform().rotate(self.current.rotation), Qt.TransformationMode.FastTransformation)
         self.viewer.load_image(image, self.current)
+        path = self.paths[self.list.currentRow()]
+        self.file_label.setText(path.name)
+        self.file_label.setToolTip(str(path.resolve()))
+        self.dimensions_label.setText(f'{image.width()} × {image.height()} px')
 
     def rotate(self, degrees):
         if not self.current:
@@ -210,7 +169,7 @@ class MainWindow(QMainWindow):
 
     def update_distance(self):
         distance = self.current.distance if self.current else None
-        self.distance_label.setText(f'Distancia: {distance:g} px' if distance is not None else 'Distancia: —')
+        self.distance_label.setText(f'{distance:g} px' if distance is not None else '— px')
 
     def changed(self):
         self.viewer.redraw()

@@ -23,11 +23,13 @@ En Windows: activa con `.venv\Scripts\activate` y usa `python main.py`.
 
 ## Uso
 
+La ventana se organiza en tres columnas ajustables: **Imágenes** a la izquierda, el **visor** en el centro y **Medición** a la derecha. Sobre el visor están los giros y el zoom. El panel derecho agrupa el resultado, el dibujo y el grosor de cada elemento; la herramienta activa se resalta en azul. Los nombres largos se abrevian y su ruta completa aparece al dejar el cursor encima. El inspector permite desplazarse verticalmente en ventanas pequeñas. La ventana mínima es de 1100 × 700.
+
 1. Abre una carpeta. El listado izquierdo incluye imágenes JPG/JPEG, PNG, BMP y TIFF de todas sus subcarpetas, ordenadas por ruta. Selecciona con el ratón o las flechas del teclado.
 2. Orienta la imagen con los botones de giro de 90°. Si hay dibujos, se solicita confirmación antes de borrarlos. Primero se respeta la orientación EXIF de la fotografía.
 3. Pulsa **Dibujar línea** y haz dos clics. La X del primero fija la línea vertical; el segundo fija su otro extremo en Y.
 4. Pulsa **Dibujar ROI** y elige dos esquinas opuestas en cualquier orden. Cada imagen tiene una línea y un ROI; dibujar otro reemplaza el anterior al completar los dos puntos.
-5. Consulta la distancia en la interfaz y en azul sobre la imagen. La línea punteada es horizontal a la altura del punto medio de la línea vertical.
+5. Consulta la distancia en el panel derecho y en azul sobre la imagen. La línea punteada es horizontal a la altura del punto medio de la línea vertical. En la barra inferior aparecen el estado de guardado y las coordenadas del cursor.
 
 La rueda y los botones **+ / −** cambian el zoom (hasta 6400 %); **100 %** restablece la escala y **Ajustar** encaja la imagen en la ventana. Para mover la imagen usa **espacio + arrastre** o el botón central. El visor debe tener el foco para los atajos. **Escape** cancela un dibujo pendiente sin borrar el anterior. La barra inferior muestra las coordenadas del cursor dentro de la imagen; fuera muestra guiones.
 
