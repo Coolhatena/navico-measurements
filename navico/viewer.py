@@ -1,7 +1,9 @@
+from math import hypot
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QColor, QPen, QPixmap, QPainter
-from PySide6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsItem, QLabel
+from PySide6.QtGui import QColor, QPixmap, QPainter
+from PySide6.QtWidgets import QGraphicsView, QGraphicsScene, QLabel
 from .model import pixel_at, make_roi
+from .rendering import AnnotationItem, annotation_pen
 
 
 class ImageView(QGraphicsView):
@@ -10,6 +12,7 @@ class ImageView(QGraphicsView):
     zoom_changed = Signal(float)
     hint = Signal(str)
     mode_changed = Signal(object)
+    reference_measured = Signal(float)
 
     def __init__(self):
         super().__init__()
@@ -123,6 +126,14 @@ class ImageView(QGraphicsView):
             if self.first is None:
                 self.first = self.hover = point
             else:
+                if self.mode == 'reference':
+                    width = hypot(point[0]-self.first[0], point[1]-self.first[1])
+                    if width == 0:
+                        self.hint.emit('Elige un punto distinto: la longitud debe ser mayor que cero.')
+                        return
+                    self.cancel()
+                    self.reference_measured.emit(float(width))
+                    return
                 if self.mode == 'line':
                     ys = sorted((self.first[1], point[1]))
                     geometry = (self.first[0], *ys) if ys[0] != ys[1] else None
@@ -177,12 +188,6 @@ class ImageView(QGraphicsView):
         self.overlays = []
         if not self.record:
             return
-        def pen(color, width, dashed=False):
-            p = QPen(QColor(color), width)
-            p.setCapStyle(Qt.PenCapStyle.FlatCap)
-            if dashed:
-                p.setStyle(Qt.PenStyle.DashLine)
-            return p
         def line(g, p):
             x, a, b = g
             self.overlays.append(self.scene().addLine(x + .5, a + .5, x + .5, b + .5, p))
@@ -190,28 +195,17 @@ class ImageView(QGraphicsView):
             a, b, c, d = g
             self.overlays.append(self.scene().addRect(a + .5, b + .5, c-a, d-b, p))
         r = self.record
-        if r.line:
-            line(r.line, pen('#ff5252', r.line_width))
-        if r.roi:
-            roi(r.roi, pen('#00d98b', r.roi_width))
+        annotation = AnnotationItem(r, self.sceneRect())
+        self.scene().addItem(annotation)
+        self.overlays.append(annotation)
         if self.first and self.hover:
-            if self.mode == 'line':
-                line((self.first[0], *sorted((self.first[1], self.hover[1]))), pen('#ffe066', r.line_width, True))
+            if self.mode == 'reference':
+                x, y = self.first
+                self.overlays.append(self.scene().addLine(x+.5, y+.5, self.hover[0]+.5, self.hover[1]+.5,
+                                                         annotation_pen('#ffe066', 1, True)))
+            elif self.mode == 'line':
+                line((self.first[0], *sorted((self.first[1], self.hover[1]))), annotation_pen('#ffe066', r.line_width, True))
             elif self.mode == 'roi':
                 g = make_roi(self.first, self.hover)
                 if g:
-                    roi(g, pen('#ffe066', r.roi_width, True))
-        if r.distance is not None:
-            x, a, b = r.line
-            y = (a + b) / 2 + .5
-            center = (r.roi[0] + r.roi[2]) / 2 + .5
-            self.overlays.append(self.scene().addLine(x+.5, y, center, y, pen('#0070ff', 1, True)))
-            text = self.scene().addSimpleText(f'Distancia: {r.distance:g} px')
-            text.setBrush(QColor('#0066ff'))
-            font = text.font()
-            font.setPixelSize(16)
-            font.setBold(True)
-            text.setFont(font)
-            text.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations)
-            text.setPos(8, 8)
-            self.overlays.append(text)
+                    roi(g, annotation_pen('#ffe066', r.roi_width, True))

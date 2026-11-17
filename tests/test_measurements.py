@@ -242,6 +242,7 @@ class WindowTests(unittest.TestCase):
             self.window.open_folder(self.root)
         self.assertTrue(self.window.store.blocked)
         self.assertFalse(self.window.widths['line_width'].isEnabled())
+        self.assertFalse(self.window.reference_spin.isEnabled())
         self.assertFalse(self.window.rotate_left.isEnabled())
         self.assertTrue(all(button.isEnabled() for button in self.window.navigation_controls))
         self.assertFalse(any(button.isEnabled() for button in self.window.draw_buttons.values()))

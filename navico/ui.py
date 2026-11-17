@@ -2,7 +2,7 @@
 from PySide6.QtCore import Qt, QSize, QRectF, QPointF
 from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap, QPolygonF
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
-    QListWidget, QSplitter, QSpinBox, QFrame, QScrollArea, QSizePolicy,
+    QListWidget, QSplitter, QSpinBox, QDoubleSpinBox, QFrame, QScrollArea, QSizePolicy,
     QStyledItemDelegate, QStyle)
 
 ACCENT = '#0066ff'
@@ -22,6 +22,7 @@ QLabel#groupTitle {{ font-size: 15px; font-weight: 600; }}
 QLabel#fileTitle {{ font-weight: 600; }}
 QLabel#muted {{ color: {MUTED}; }}
 QLabel#distance {{ color: {ACCENT}; font-size: 34px; font-weight: 700; }}
+QLabel#distanceMm {{ color: {ACCENT}; font-size: 26px; font-weight: 700; }}
 QLabel#zoomValue {{ background: #f5f7fa; border: 1px solid {BORDER}; border-radius: 5px; padding: 6px 0; }}
 QPushButton {{ background: #ffffff; border: 1px solid #cdd5e0; border-radius: 6px;
     min-height: 32px; padding: 0 10px; }}
@@ -33,10 +34,10 @@ QPushButton[primary="true"] {{ background: {ACCENT}; color: #ffffff; border-colo
 QPushButton[primary="true"]:hover {{ background: #0055d4; }}
 QPushButton[quiet="true"] {{ background: #f5f7fa; }}
 QPushButton:disabled {{ color: #9aa4b2; background: #f5f7fa; border-color: #e4e8ee; }}
-QSpinBox {{ background: #ffffff; border: 1px solid #cdd5e0; border-radius: 5px;
+QSpinBox, QDoubleSpinBox {{ background: #ffffff; border: 1px solid #cdd5e0; border-radius: 5px;
     min-height: 32px; padding-left: 10px; }}
-QSpinBox:focus {{ border: 1px solid {ACCENT}; }}
-QSpinBox:disabled {{ color: #9aa4b2; background: #f5f7fa; }}
+QSpinBox:focus, QDoubleSpinBox:focus {{ border: 1px solid {ACCENT}; }}
+QSpinBox:disabled, QDoubleSpinBox:disabled {{ color: #9aa4b2; background: #f5f7fa; }}
 QListWidget {{ border: none; background: #ffffff; outline: none; }}
 QScrollArea {{ border: none; background: #ffffff; }}
 QSplitter::handle {{ background: {BORDER}; }}
@@ -206,6 +207,11 @@ class WorkspaceUI:
         open_button.setProperty('primary', True)
         open_button.clicked.connect(self.choose_folder)
         top.addWidget(open_button)
+        self.export_button = QPushButton('Guardar Imagenes')
+        self.export_button.setToolTip('Exportar todas las mediciones completas como PNG')
+        self.export_button.clicked.connect(self.choose_export_destination)
+        self.export_button.setEnabled(False)
+        top.addWidget(self.export_button)
         self.folder_label = ElidedLabel('Sin carpeta')
         self.folder_label.setObjectName('fileTitle')
         top.addWidget(self.folder_label)
@@ -285,6 +291,29 @@ class WorkspaceUI:
         layout.addWidget(QLabel('Distancia horizontal'))
         self.distance_label = title('— px', 'distance')
         layout.addWidget(self.distance_label)
+        self.distance_mm_label = title('— mm', 'distanceMm')
+        self.distance_mm_label.setAccessibleName('Distancia en milímetros')
+        layout.addWidget(self.distance_mm_label)
+        layout.addWidget(rule())
+        layout.addWidget(title('Tamaño de referencia', 'groupTitle'))
+        note = title('Ancho equivalente a 7 mm', 'muted')
+        note.setWordWrap(True)
+        layout.addWidget(note)
+        self.reference_spin = QDoubleSpinBox()
+        self.reference_spin.setDecimals(3)
+        self.reference_spin.setRange(0, 1_000_000_000_000)
+        self.reference_spin.setSuffix(' px')
+        self.reference_spin.setSpecialValueText('Sin referencia')
+        self.reference_spin.setKeyboardTracking(False)
+        self.reference_spin.setAccessibleName('Tamaño de referencia en píxeles para 7 mm')
+        self.reference_spin.valueChanged.connect(self.set_reference)
+        self.edit_controls.append(self.reference_spin)
+        layout.addWidget(self.reference_spin)
+        reference_button = self.control('Medir referencia', lambda: self.viewer.set_mode('reference'), self.edit_controls)
+        reference_button.setToolTip('Dos puntos: se mide la longitud en cualquier dirección')
+        reference_button.setCheckable(True)
+        self.draw_buttons['reference'] = reference_button
+        layout.addWidget(reference_button)
         layout.addWidget(rule())
         for key, heading, color, draw_text, erase_text in [
                 ('line', 'Línea vertical', '#ff5252', 'Dibujar línea', 'Borrar línea'),

@@ -11,6 +11,7 @@ class Measurement:
     roi: tuple[int, int, int, int] | None = None
     line_width: int = 2
     roi_width: int = 2
+    reference_width_px: float | None = None
 
     @property
     def distance(self):
@@ -18,13 +19,28 @@ class Measurement:
             return None
         return abs((self.roi[0] + self.roi[2]) / 2 - self.line[0])
 
+    @property
+    def distance_mm(self):
+        if self.distance is None or self.reference_width_px is None:
+            return None
+        return self.distance * 7 / self.reference_width_px
+
     def to_dict(self):
         return asdict(self)
 
     @classmethod
     def from_dict(cls, data):
-        if not isinstance(data, dict) or set(data) != set(cls.__dataclass_fields__):
+        fields = set(cls.__dataclass_fields__)
+        if not isinstance(data, dict) or set(data) not in (fields, fields - {'reference_width_px'}):
             raise ValueError("Estructura de medición inválida")
+        reference = data.get('reference_width_px')
+        if reference is not None:
+            try:
+                valid = type(reference) in (int, float) and math.isfinite(reference) and reference > 0
+            except OverflowError:
+                valid = False
+            if not valid:
+                raise ValueError('Tamaño de referencia inválido')
         def integers(value, length):
             return isinstance(value, (list, tuple)) and len(value) == length and all(type(n) is int for n in value)
         if type(data['rotation']) is not int or data['rotation'] not in (0, 90, 180, 270):
@@ -51,6 +67,10 @@ class Measurement:
                 if not (0 <= a < c < w and 0 <= b < d < h):
                     raise ValueError("ROI fuera de límites")
         return obj
+
+
+def format_mm(value):
+    return f'{value:.2f}'.rstrip('0').rstrip('.') if value is not None else '—'
 
 
 def pixel_at(x, y, width, height):
