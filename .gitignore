@@ -5,3 +5,8 @@ __pycache__/
 .navico-measurements.json
 
 images/
+
+# Artefactos generados por PyInstaller
+/build/
+/dist/
+/*.spec
